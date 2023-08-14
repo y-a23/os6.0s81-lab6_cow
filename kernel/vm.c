@@ -311,7 +311,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -319,14 +319,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    
+    *pte = (*pte) & (~PTE_W); // set the write flag fault
+    *pte = (*pte) | (PTE_COW);// set the cow flag true
+    
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      //kfree(mem);
       goto err;
     }
+    add_link(pa);
   }
   return 0;
 
@@ -351,6 +356,67 @@ uvmclear(pagetable_t pagetable, uint64 va)
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
+int cow_check(pagetable_t pagetable, uint64 va)
+{
+  // if(va > MAXVA)
+  //   return 0;
+
+  // pte_t *pte = walk(pagetable, va, 0);
+
+  // if(pte == 0)
+  //   return 0;
+  // // printf("judge here 0\n");
+  // if(((*pte) & (PTE_V)) == 0)
+  //   return 0;
+  // // printf("judge here 1\n");
+  // int ans = (*pte) & (PTE_COW);
+
+  // return ans;
+  if(va > MAXVA) return 0;
+  //不判断一下va是否在范围内，也通过不了测试
+  pte_t *pte = walk(pagetable,va,0);
+  if(pte==0) return 0;
+  if(((*pte)&PTE_V)==0)return 0;
+  if(((*pte)&PTE_COW)==0)return 0;
+
+  return 1;
+}
+
+uint64
+cow_handler(pagetable_t pagetable, uint64 va)
+{
+  if(cow_check(pagetable,va)==0)return 0;
+
+  va = PGROUNDDOWN(va);
+  pte_t *pte = walk(pagetable,va,0);
+  uint64 pa = PTE2PA(*pte);
+
+  
+  if(get_linknum(pa)==1)
+  {
+    *pte=((*pte)&(~PTE_COW))|(PTE_W);
+    return pa;
+  }
+  else
+  {
+    char* mem=kalloc();
+    if(mem==0)return 0;
+    memmove(mem,(char*)pa,PGSIZE);
+
+    uint64 flag=(PTE_FLAGS(*pte) | PTE_W) & (~PTE_COW);
+
+    uvmunmap(pagetable,va,1,0);
+    if(mappages(pagetable, va, PGSIZE, (uint64)mem,flag)!=0)
+    {
+      kfree(mem);
+      return 0;
+    }
+    kfree((char*)PGROUNDDOWN(pa));
+    //这里只能用kfree，如果手动把count减一可能会出现内存泄露
+    return (uint64)mem;
+  }
+}
+
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
@@ -359,6 +425,12 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
+
+    if(cow_check(pagetable,va0)!=0)
+      {
+        pa0=cow_handler(pagetable, va0);
+      }
+    
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

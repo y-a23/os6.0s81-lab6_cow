@@ -65,7 +65,30 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } 
+  else if(r_scause()==13 || r_scause()==15)
+  {
+    uint64 va = r_stval();
+    if(cow_check(p->pagetable,va)==0)
+    {
+      p->killed=1;
+    }
+    else if(cow_handler(p->pagetable, va) == 0)
+    {
+      //一开始没有考虑cow_handler失败的情况，运行test exeout会一直卡住
+      // panic("be kill\n");
+      p->killed = 1;
+    }
+    // if(cow_check(p->pagetable,va)==1)
+    // {
+    //   if(cow_handler(p->pagetable,va)==0)p->killed=1;
+    // }
+    // else
+    // {
+    //   p->killed=1;
+    // }
+  }
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

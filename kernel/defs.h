@@ -9,6 +9,13 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+pte_t* walk(pagetable_t,uint64,int);
+
+int cow_check(pagetable_t pagetable, uint64 va);
+int add_link(uint64 pa);
+
+int get_linknum(uint64 pa);
+uint64 cow_handler(pagetable_t pagetable, uint64 va);
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
