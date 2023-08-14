@@ -358,20 +358,6 @@ uvmclear(pagetable_t pagetable, uint64 va)
 // Return 0 on success, -1 on error.
 int cow_check(pagetable_t pagetable, uint64 va)
 {
-  // if(va > MAXVA)
-  //   return 0;
-
-  // pte_t *pte = walk(pagetable, va, 0);
-
-  // if(pte == 0)
-  //   return 0;
-  // // printf("judge here 0\n");
-  // if(((*pte) & (PTE_V)) == 0)
-  //   return 0;
-  // // printf("judge here 1\n");
-  // int ans = (*pte) & (PTE_COW);
-
-  // return ans;
   if(va > MAXVA) return 0;
   //不判断一下va是否在范围内，也通过不了测试
   pte_t *pte = walk(pagetable,va,0);
